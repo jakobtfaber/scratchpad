@@ -3,7 +3,7 @@ BUNDLE_NAME = $(APP_NAME).app
 CONTENTS = $(BUNDLE_NAME)/Contents
 MACOS = $(CONTENTS)/MacOS
 RESOURCES = $(CONTENTS)/Resources
-APPLICATIONS_DIR = $(HOME)/Applications
+APPLICATIONS_DIR ?= /Applications
 PLIST_NAME = com.jakobtfaber.scratchpad.plist
 LAUNCH_AGENTS_DIR = $(HOME)/Library/LaunchAgents
 
@@ -19,21 +19,21 @@ app:
 	@echo "Built $(BUNDLE_NAME) successfully."
 
 install: app
-	@mkdir -p $(APPLICATIONS_DIR)
 	@rm -rf $(APPLICATIONS_DIR)/$(BUNDLE_NAME)
 	@cp -R $(BUNDLE_NAME) $(APPLICATIONS_DIR)/
+	@/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f $(APPLICATIONS_DIR)/$(BUNDLE_NAME) 2>/dev/null || true
 	@echo "Installed $(BUNDLE_NAME) to $(APPLICATIONS_DIR)/$(BUNDLE_NAME)."
 
-run: app
+run: install
 	@pkill -x $(APP_NAME) 2>/dev/null || pkill -x DesktopNotepad 2>/dev/null || true
-	@open $(BUNDLE_NAME)
-	@echo "Launched $(BUNDLE_NAME)."
+	@open $(APPLICATIONS_DIR)/$(BUNDLE_NAME)
+	@echo "Launched $(APPLICATIONS_DIR)/$(BUNDLE_NAME)."
 
 stop:
-	@pkill -x $(APP_NAME) 2>/dev/null && echo "Stopped $(APP_NAME)." || echo "$(APP_NAME) is not running."
+	@pkill -x $(APP_NAME) 2>/dev/null || pkill -x DesktopNotepad 2>/dev/null && echo "Stopped $(APP_NAME)." || echo "$(APP_NAME) is not running."
 
 status:
-	@pgrep -l $(APP_NAME) && echo "Status: Running" || echo "Status: Stopped"
+	@pgrep -l $(APP_NAME) && echo "Status: Running ($(APP_NAME))" || (pgrep -l DesktopNotepad && echo "Status: Running (DesktopNotepad)" || echo "Status: Stopped")
 
 test:
 	swift test_suite.swift
