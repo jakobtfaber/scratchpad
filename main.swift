@@ -173,6 +173,18 @@ class FileWatcher {
 
 // MARK: - Application Delegate & Coordinator
 
+/// A header is a Markdown-style "# " line or a line written entirely in capitals.
+func isScratchpadHeader(_ line: String) -> Bool {
+    let trimmed = line.trimmingCharacters(in: .whitespaces)
+    if trimmed.hasPrefix("#") { return true }
+    return trimmed.count >= 3 && trimmed.contains(where: { $0.isLetter }) && trimmed == trimmed.uppercased()
+}
+
+func isScratchpadRule(_ line: String) -> Bool {
+    let trimmed = line.trimmingCharacters(in: .whitespaces)
+    return trimmed.count >= 5 && !trimmed.contains(where: { $0.isLetter || $0.isNumber })
+}
+
 class AppDelegate: NSObject, NSApplicationDelegate, NSTextViewDelegate, NSWindowDelegate {
     var panel: DesktopNotepadPanel!
     var textView: ScratchpadTextView!
@@ -470,7 +482,32 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSTextViewDelegate, NSWindow
         if let content = try? String(contentsOf: storageURL, encoding: .utf8) {
             lastSavedContent = content
             textView.string = content
+            applyHeaderStyling()
         }
+    }
+
+    /// Bolds header lines (display only; the notes file stays plain text).
+    private func applyHeaderStyling() {
+        guard let storage = textView.textStorage else { return }
+        let text = storage.string as NSString
+        let regular = NSFont.monospacedSystemFont(ofSize: 13.5, weight: .regular)
+        let bold = NSFont.monospacedSystemFont(ofSize: 13.5, weight: .bold)
+        storage.beginEditing()
+        storage.addAttribute(.font, value: regular, range: NSRange(location: 0, length: text.length))
+        var previous: (line: String, range: NSRange)?
+        text.enumerateSubstrings(in: NSRange(location: 0, length: text.length), options: .byLines) { line, range, _, _ in
+            guard let line = line else { return }
+            if isScratchpadHeader(line) {
+                storage.addAttribute(.font, value: bold, range: range)
+            }
+            // Text directly above a ruled line is a header too.
+            if isScratchpadRule(line), let above = previous, above.range.length > 0, !isScratchpadRule(above.line) {
+                storage.addAttribute(.font, value: bold, range: above.range)
+            }
+            previous = (line, range)
+        }
+        storage.endEditing()
+        textView.typingAttributes[.font] = regular
     }
 
     private func setupFileWatcher() {
@@ -487,6 +524,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSTextViewDelegate, NSWindow
             lastSavedContent = diskContent
             let selectedRange = textView.selectedRange()
             textView.string = diskContent
+            applyHeaderStyling()
             let length = (diskContent as NSString).length
             let location = min(selectedRange.location, length)
             textView.setSelectedRange(NSRange(location: location, length: min(selectedRange.length, length - location)))
@@ -496,6 +534,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSTextViewDelegate, NSWindow
     }
 
     func textDidChange(_ notification: Notification) {
+        applyHeaderStyling()
         saveTimer?.invalidate()
         saveTimer = Timer.scheduledTimer(withTimeInterval: 0.75, repeats: false) { [weak self] _ in
             self?.persistContent()
